@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Environment variables
+.env
+
+# Data files
+data/raw/
+data/processed/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Node / frontend
+node_modules/
+.next/
+out/
+dist/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
