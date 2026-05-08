@@ -15,13 +15,12 @@ A full-stack learning project for building an AI-powered stock analysis, predict
 
 ## Rule
 
-This project is for education and paper trading only.
 "@ | Set-Content README.md
 
-## Start up server
+## Start up local server
 
 cd backend
 .\.venv\Scripts\Activate.ps1
 uvicorn app.main:app --reload
 
-Check api with http://127.0.0.1:8000/docs
+Check api on local computer with http://127.0.0.1:8000/docs
