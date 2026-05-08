@@ -1,12 +1,14 @@
 from fastapi import APIRouter
 
+from app.schemas.prices import PriceResponse
+
 router = APIRouter(
     prefix="/api/prices",
     tags=["prices"],
 )
 
 
-@router.get("/{symbol}")
+@router.get("/{symbol}", response_model=PriceResponse)
 def get_prices(symbol: str):
     return {
         "symbol": symbol.upper(),
