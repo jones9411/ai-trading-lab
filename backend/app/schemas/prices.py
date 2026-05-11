@@ -1,8 +1,10 @@
+from datetime import date
+
 from pydantic import BaseModel
 
 
 class PriceBar(BaseModel):
-    date: str
+    date: date
     open: float
     high: float
     low: float
