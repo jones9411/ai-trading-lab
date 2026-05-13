@@ -1,8 +1,8 @@
 from datetime import date
 
 
-def get_fake_prices():
-    return [
+FAKE_PRICE_DATA = {
+    "AAPL": [
         {
             "date": "2026-04-01",
             "open": 188.20,
@@ -27,7 +27,74 @@ def get_fake_prices():
             "close": 191.10,
             "volume": 50100000,
         },
-    ]
+    ],
+    "MSFT": [
+        {
+            "date": "2026-04-01",
+            "open": 415.10,
+            "high": 420.30,
+            "low": 412.80,
+            "close": 418.40,
+            "volume": 28100000,
+        },
+        {
+            "date": "2026-04-02",
+            "open": 418.40,
+            "high": 422.75,
+            "low": 416.90,
+            "close": 421.20,
+            "volume": 26400000,
+        },
+        {
+            "date": "2026-04-03",
+            "open": 421.20,
+            "high": 423.50,
+            "low": 417.60,
+            "close": 419.85,
+            "volume": 29700000,
+        },
+    ],
+    "TSLA": [
+        {
+            "date": "2026-04-01",
+            "open": 172.50,
+            "high": 178.20,
+            "low": 169.90,
+            "close": 176.35,
+            "volume": 91200000,
+        },
+        {
+            "date": "2026-04-02",
+            "open": 176.35,
+            "high": 181.00,
+            "low": 174.10,
+            "close": 179.60,
+            "volume": 87400000,
+        },
+        {
+            "date": "2026-04-03",
+            "open": 179.60,
+            "high": 180.40,
+            "low": 171.80,
+            "close": 173.25,
+            "volume": 95800000,
+        },
+    ],
+}
+
+
+def normalize_symbol(symbol: str) -> str:
+    return symbol.upper().strip()
+
+
+def has_price_data_for_symbol(symbol: str) -> bool:
+    normalized_symbol = normalize_symbol(symbol)
+    return normalized_symbol in FAKE_PRICE_DATA
+
+
+def get_fake_prices(symbol: str):
+    normalized_symbol = normalize_symbol(symbol)
+    return FAKE_PRICE_DATA.get(normalized_symbol, [])
 
 
 def filter_prices_by_date(
@@ -56,7 +123,9 @@ def get_prices_for_symbol(
     start_date: date | None = None,
     end_date: date | None = None,
 ):
-    prices = get_fake_prices()
+    normalized_symbol = normalize_symbol(symbol)
+
+    prices = get_fake_prices(normalized_symbol)
 
     filtered_prices = filter_prices_by_date(
         prices=prices,
@@ -65,6 +134,6 @@ def get_prices_for_symbol(
     )
 
     return {
-        "symbol": symbol.upper(),
+        "symbol": normalized_symbol,
         "prices": filtered_prices,
     }
