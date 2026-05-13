@@ -3,11 +3,7 @@ from datetime import date
 from fastapi import APIRouter, HTTPException, Path
 
 from app.schemas.prices import PriceResponse
-from app.services.price_service import (
-    get_prices_for_symbol,
-    has_price_data_for_symbol,
-    normalize_symbol,
-)
+from app.services.price_service import get_prices_for_symbol, normalize_symbol
 
 router = APIRouter(
     prefix="/api/prices",
@@ -22,7 +18,7 @@ def get_prices(
         min_length=1,
         max_length=10,
         pattern=r"^[A-Za-z0-9.\-]+$",
-        description="Stock symbol, for example AAPL, MSFT, or TSLA.",
+        description="Stock symbol, for example AAPL, MSFT, TSLA, or VOD.L.",
     ),
     start_date: date | None = None,
     end_date: date | None = None,
@@ -33,12 +29,6 @@ def get_prices(
         raise HTTPException(
             status_code=400,
             detail="start_date cannot be later than end_date",
-        )
-
-    if not has_price_data_for_symbol(normalized_symbol):
-        raise HTTPException(
-            status_code=404,
-            detail=f"No price data found for symbol {normalized_symbol}",
         )
 
     response = get_prices_for_symbol(
