@@ -1,3 +1,4 @@
+import logging
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -10,6 +11,7 @@ PRICE_DATA_DIR = PROJECT_ROOT / "data" / "raw" / "prices"
 
 MARKET_CLOSED_TOLERANCE_DAYS = 5
 
+logger = logging.getLogger(__name__)
 
 def normalize_symbol(symbol: str) -> str:
     return symbol.upper().strip()
@@ -59,6 +61,13 @@ def fetch_price_data_from_yfinance(
 ) -> pd.DataFrame:
     normalized_symbol = normalize_symbol(symbol)
 
+    logger.info(
+        "Fetching price data from yfinance for %s from %s to %s",
+        normalized_symbol,
+        start_date,
+        end_date,
+    )
+
     yf_end_date = end_date + timedelta(days=1)
 
     ticker = yf.Ticker(normalized_symbol)
@@ -70,7 +79,15 @@ def fetch_price_data_from_yfinance(
         auto_adjust=False,
     )
 
-    return clean_price_dataframe(data)
+    cleaned_data = clean_price_dataframe(data)
+
+    logger.info(
+        "Fetched %s rows from yfinance for %s",
+        len(cleaned_data),
+        normalized_symbol,
+    )
+
+    return cleaned_data
 
 
 def save_price_data_to_csv(symbol: str, data: pd.DataFrame) -> None:
@@ -79,11 +96,24 @@ def save_price_data_to_csv(symbol: str, data: pd.DataFrame) -> None:
     csv_path = get_price_csv_path(symbol)
     cleaned_data = clean_price_dataframe(data)
 
+    logger.info(
+        "Saving %s rows of price data for %s to %s",
+        len(cleaned_data),
+        normalize_symbol(symbol),
+        csv_path,
+    )
+
     cleaned_data.to_csv(csv_path, index_label="Date")
 
 
 def load_price_data_from_csv(symbol: str) -> pd.DataFrame:
     csv_path = get_price_csv_path(symbol)
+
+    logger.info(
+        "Loading local price data for %s from %s",
+        normalize_symbol(symbol),
+        csv_path,
+    )
 
     data = pd.read_csv(
         csv_path,
@@ -91,8 +121,15 @@ def load_price_data_from_csv(symbol: str) -> pd.DataFrame:
         parse_dates=True,
     )
 
-    return clean_price_dataframe(data)
+    cleaned_data = clean_price_dataframe(data)
 
+    logger.info(
+        "Loaded %s rows of local price data for %s",
+        len(cleaned_data),
+        normalize_symbol(symbol),
+    )
+
+    return cleaned_data
 
 def local_price_data_exists(symbol: str) -> bool:
     csv_path = get_price_csv_path(symbol)
@@ -155,7 +192,16 @@ def get_price_data(
 ) -> pd.DataFrame:
     normalized_symbol = normalize_symbol(symbol)
 
+    logger.info(
+        "Getting price data for %s from %s to %s",
+        normalized_symbol,
+        start_date,
+        end_date,
+    )
+
     if local_price_data_exists(normalized_symbol):
+        logger.info("Local cache file exists for %s", normalized_symbol)
+
         cached_data = load_price_data_from_csv(normalized_symbol)
 
         if cached_data_covers_date_range(
@@ -163,11 +209,21 @@ def get_price_data(
             start_date=start_date,
             end_date=end_date,
         ):
+            logger.info(
+                "Using local cached price data for %s",
+                normalized_symbol,
+            )
+
             return filter_data_by_date_range(
                 data=cached_data,
                 start_date=start_date,
                 end_date=end_date,
             )
+
+        logger.info(
+            "Local cache for %s does not fully cover requested date range. Fetching fresh data.",
+            normalized_symbol,
+        )
 
         fetched_data = fetch_price_data_from_yfinance(
             symbol=normalized_symbol,
@@ -176,6 +232,13 @@ def get_price_data(
         )
 
         if fetched_data.empty:
+            logger.warning(
+                "yfinance returned no new data for %s from %s to %s. Returning filtered cached data.",
+                normalized_symbol,
+                start_date,
+                end_date,
+            )
+
             return filter_data_by_date_range(
                 data=cached_data,
                 start_date=start_date,
@@ -198,13 +261,25 @@ def get_price_data(
             end_date=end_date,
         )
 
+    logger.info(
+        "No local cache file found for %s. Fetching from yfinance.",
+        normalized_symbol,
+    )
+
     fetched_data = fetch_price_data_from_yfinance(
         symbol=normalized_symbol,
         start_date=start_date,
         end_date=end_date,
     )
 
-    if not fetched_data.empty:
+    if fetched_data.empty:
+        logger.warning(
+            "No price data found for %s from %s to %s",
+            normalized_symbol,
+            start_date,
+            end_date,
+        )
+    else:
         save_price_data_to_csv(
             symbol=normalized_symbol,
             data=fetched_data,
@@ -215,7 +290,6 @@ def get_price_data(
         start_date=start_date,
         end_date=end_date,
     )
-
 
 def convert_yfinance_data_to_price_bars(data: pd.DataFrame) -> list[dict]:
     price_bars = []
