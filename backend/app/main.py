@@ -1,7 +1,7 @@
 import logging
 from fastapi import FastAPI
 
-from app.routers import prices
+from app.routers import features, prices
 
 logging.basicConfig(
     level=logging.INFO,
@@ -15,6 +15,7 @@ app = FastAPI(
 )
 
 app.include_router(prices.router)
+app.include_router(features.router)
 
 @app.get("/")
 def read_root():
