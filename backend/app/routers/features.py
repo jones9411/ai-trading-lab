@@ -5,7 +5,12 @@ from fastapi import APIRouter, HTTPException, Path
 
 from app.schemas.features import FeatureResponse
 from app.services.feature_service import create_price_features
-from app.services.price_service import get_price_data, normalize_symbol
+from app.services.price_service import (
+    get_default_end_date,
+    get_default_start_date,
+    get_price_data,
+    normalize_symbol,
+)
 
 
 router = APIRouter(
@@ -60,6 +65,12 @@ def get_features(
             status_code=400,
             detail="start_date cannot be later than end_date",
         )
+        
+    if start_date is None:
+        start_date = get_default_start_date()
+
+    if end_date is None:
+        end_date = get_default_end_date()
 
     price_data = get_price_data(
         symbol=normalized_symbol,
@@ -80,3 +91,4 @@ def get_features(
         "symbol": normalized_symbol,
         "features": feature_bars,
     }
+    
