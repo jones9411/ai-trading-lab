@@ -5,7 +5,9 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
+from app.ml.model_storage import save_model
 from app.ml.backtesting import run_long_flat_backtest
+from app.ml.risk_management import DEFAULT_MAX_ALLOCATION, DEFAULT_STOP_LOSS_PCT
 from app.ml.dataset_preparation import (
     FEATURE_COLUMNS,
     TARGET_COLUMN,
@@ -70,6 +72,8 @@ def train_baseline_model(dataset: pd.DataFrame) -> dict:
     backtest_results = run_long_flat_backtest(
         test_data=test_data,
         predictions=model_predictions,
+        max_allocation=DEFAULT_MAX_ALLOCATION,
+        stop_loss_pct=DEFAULT_STOP_LOSS_PCT,
     )
 
     return {
@@ -115,13 +119,29 @@ def print_backtest_summary(backtest: dict) -> None:
 
     summary = backtest["summary"]
 
-    print("Simple long/flat backtest")
-    print("-------------------------")
+    print("Simple long/flat backtest with risk controls")
+    print("--------------------------------------------")
     print(f"Backtest rows: {summary['backtest_rows']}")
     print(
         "Days in market: "
         f"{summary['days_in_market']} "
         f"({summary['percent_days_in_market']:.1%})"
+    )
+    print(
+        "Configured max allocation: "
+        f"{summary['configured_max_allocation']:.1%}"
+    )
+
+    stop_loss_pct = summary["configured_stop_loss_pct"]
+
+    if stop_loss_pct is None:
+        print("Configured stop-loss: None")
+    else:
+        print(f"Configured stop-loss: {stop_loss_pct:.1%}")
+
+    print(
+        "Average position allocation: "
+        f"{summary['average_position_allocation']:.1%}"
     )
     print()
     print(f"Strategy total return:     {summary['strategy_total_return']:.2%}")
@@ -134,6 +154,15 @@ def print_backtest_summary(backtest: dict) -> None:
     print(
         "Buy-and-hold average daily return: "
         f"{summary['buy_hold_average_daily_return']:.4%}"
+    )
+    print()
+    print(
+        "Worst strategy daily return:     "
+        f"{summary['worst_strategy_daily_return']:.2%}"
+    )
+    print(
+        "Worst buy-and-hold daily return: "
+        f"{summary['worst_buy_hold_daily_return']:.2%}"
     )
     print()
 
@@ -152,6 +181,7 @@ def print_training_summary(
     dataset: pd.DataFrame,
     results: dict,
     dataset_path=None,
+    model_path=None,
 ) -> None:
     """
     Print a readable summary of the training run.
@@ -170,6 +200,9 @@ def print_training_summary(
 
     if dataset_path is not None:
         print(f"Saved ML dataset: {dataset_path}")
+        
+    if model_path is not None:
+        print(f"Saved model artifact: {model_path}")
 
     print()
     print(f"Training rows: {results['training_rows']}")
@@ -223,11 +256,17 @@ def main() -> None:
 
     results = train_baseline_model(dataset)
 
+    model_path = save_model(
+        model=results["model"],
+        symbol=symbol,
+    )
+
     print_training_summary(
         symbol=symbol,
         dataset=dataset,
         results=results,
         dataset_path=dataset_path,
+        model_path=model_path,
     )
 
 

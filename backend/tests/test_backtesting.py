@@ -97,3 +97,31 @@ def test_backtest_raises_error_when_return_column_is_missing():
             test_data=test_data,
             predictions=predictions,
         )
+        
+def test_backtest_applies_max_allocation_and_stop_loss():
+    test_data = pd.DataFrame(
+        {
+            "target_next_day_return": [-0.10, 0.04, 0.03],
+        }
+    )
+    predictions = [1, 1, 0]
+
+    backtest_data = build_long_flat_backtest_frame(
+        test_data=test_data,
+        predictions=predictions,
+        max_allocation=0.50,
+        stop_loss_pct=0.02,
+    )
+
+    assert backtest_data["position"].tolist() == [1, 1, 0]
+    assert backtest_data["position_allocation"].tolist() == pytest.approx(
+        [0.50, 0.50, 0.0]
+    )
+
+    assert backtest_data["strategy_return"].tolist() == pytest.approx(
+        [-0.01, 0.02, 0.0]
+    )
+
+    assert backtest_data["raw_strategy_return"].tolist() == pytest.approx(
+        [-0.05, 0.02, 0.0]
+    )

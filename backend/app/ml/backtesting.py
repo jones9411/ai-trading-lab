@@ -2,6 +2,12 @@ from collections.abc import Sequence
 
 import pandas as pd
 
+from app.ml.risk_management import (
+    apply_max_allocation_to_positions,
+    calculate_strategy_return,
+    validate_research_mode,
+)
+
 
 RETURN_COLUMN = "target_next_day_return"
 
@@ -25,13 +31,6 @@ def create_long_flat_positions(predictions: Sequence[int]) -> list[int]:
 def calculate_total_return(returns: pd.Series) -> float:
     """
     Calculate compounded total return from a series of daily returns.
-
-    Example:
-    Day 1 return: 10%
-    Day 2 return: 5%
-
-    Total return:
-    (1 + 0.10) * (1 + 0.05) - 1
     """
 
     if returns.empty:
@@ -44,6 +43,8 @@ def build_long_flat_backtest_frame(
     test_data: pd.DataFrame,
     predictions: Sequence[int],
     return_column: str = RETURN_COLUMN,
+    max_allocation: float = 1.0,
+    stop_loss_pct: float | None = None,
 ) -> pd.DataFrame:
     """
     Build a DataFrame showing strategy returns and buy-and-hold returns.
@@ -51,7 +52,13 @@ def build_long_flat_backtest_frame(
     The model strategy is:
     - prediction 1 -> long
     - prediction 0 -> flat
+
+    Risk controls:
+    - max_allocation limits how much capital is exposed
+    - stop_loss_pct caps simulated trade loss
     """
+
+    validate_research_mode()
 
     if return_column not in test_data.columns:
         raise ValueError(f"Missing required return column: {return_column}")
@@ -64,12 +71,30 @@ def build_long_flat_backtest_frame(
 
     backtest_data = test_data.copy()
 
-    backtest_data["prediction"] = [int(prediction) for prediction in predictions]
-    backtest_data["position"] = create_long_flat_positions(predictions)
+    positions = create_long_flat_positions(predictions)
 
-    backtest_data["strategy_return"] = (
-        backtest_data["position"] * backtest_data[return_column]
+    backtest_data["prediction"] = [int(prediction) for prediction in predictions]
+    backtest_data["position"] = positions
+    backtest_data["position_allocation"] = apply_max_allocation_to_positions(
+        positions=positions,
+        max_allocation=max_allocation,
     )
+
+    backtest_data["raw_strategy_return"] = (
+        backtest_data["position_allocation"] * backtest_data[return_column]
+    )
+
+    backtest_data["strategy_return"] = [
+        calculate_strategy_return(
+            asset_return=asset_return,
+            position_allocation=position_allocation,
+            stop_loss_pct=stop_loss_pct,
+        )
+        for asset_return, position_allocation in zip(
+            backtest_data[return_column],
+            backtest_data["position_allocation"],
+        )
+    ]
 
     backtest_data["buy_hold_return"] = backtest_data[return_column]
 
@@ -107,6 +132,12 @@ def summarize_backtest(backtest_data: pd.DataFrame) -> dict:
         "backtest_rows": total_days,
         "days_in_market": days_in_market,
         "percent_days_in_market": days_in_market / total_days,
+        "average_position_allocation": float(
+            backtest_data["position_allocation"].mean()
+        ),
+        "max_position_allocation": float(
+            backtest_data["position_allocation"].max()
+        ),
         "strategy_total_return": strategy_total_return,
         "buy_hold_total_return": buy_hold_total_return,
         "strategy_average_daily_return": float(
@@ -115,12 +146,20 @@ def summarize_backtest(backtest_data: pd.DataFrame) -> dict:
         "buy_hold_average_daily_return": float(
             backtest_data["buy_hold_return"].mean()
         ),
+        "worst_strategy_daily_return": float(
+            backtest_data["strategy_return"].min()
+        ),
+        "worst_buy_hold_daily_return": float(
+            backtest_data["buy_hold_return"].min()
+        ),
     }
 
 
 def run_long_flat_backtest(
     test_data: pd.DataFrame,
     predictions: Sequence[int],
+    max_allocation: float = 1.0,
+    stop_loss_pct: float | None = None,
 ) -> dict:
     """
     Run a simple long/flat backtest.
@@ -133,12 +172,16 @@ def run_long_flat_backtest(
     backtest_data = build_long_flat_backtest_frame(
         test_data=test_data,
         predictions=predictions,
+        max_allocation=max_allocation,
+        stop_loss_pct=stop_loss_pct,
     )
 
     summary = summarize_backtest(backtest_data)
+
+    summary["configured_max_allocation"] = max_allocation
+    summary["configured_stop_loss_pct"] = stop_loss_pct
 
     return {
         "backtest_data": backtest_data,
         "summary": summary,
     }
-    
