@@ -2,11 +2,8 @@ from datetime import date
 
 import pandas as pd
 
-from app.ml.train_baseline_model import (
-    FEATURE_COLUMNS,
-    build_training_dataset,
-    train_baseline_model,
-)
+from app.ml.dataset_preparation import FEATURE_COLUMNS, build_ml_dataset
+from app.ml.train_baseline_model import train_baseline_model
 from app.services.feature_service import create_price_features
 from app.services.price_service import get_price_data, normalize_symbol
 
@@ -96,7 +93,7 @@ def get_prediction_for_symbol(symbol: str) -> dict:
     start_date = TRAINING_START_DATE
     end_date = date.today()
 
-    dataset = build_training_dataset(
+    dataset = build_ml_dataset(
         symbol=normalized_symbol,
         start_date=start_date,
         end_date=end_date,

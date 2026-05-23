@@ -5,80 +5,15 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
+from app.ml.backtesting import run_long_flat_backtest
+from app.ml.dataset_preparation import (
+    FEATURE_COLUMNS,
+    TARGET_COLUMN,
+    build_ml_dataset,
+    create_train_test_data,
+    save_ml_dataset,
+)
 from app.ml.model_evaluation import calculate_classification_metrics
-from app.services.feature_service import create_price_features
-from app.services.label_service import create_price_labels
-from app.services.price_service import get_price_data, normalize_symbol
-
-
-FEATURE_COLUMNS = [
-    "daily_return",
-    "sma_5",
-    "sma_20",
-    "rolling_volatility_20",
-]
-
-TARGET_COLUMN = "target_up_next_day"
-
-
-def build_training_dataset(
-    symbol: str,
-    start_date: date,
-    end_date: date,
-) -> pd.DataFrame:
-    """
-    Build a clean machine-learning dataset for one stock symbol.
-
-    This function:
-    1. Loads price data
-    2. Creates feature columns
-    3. Creates label columns
-    4. Removes rows with missing feature or target values
-    """
-
-    normalized_symbol = normalize_symbol(symbol)
-
-    price_data = get_price_data(
-        symbol=normalized_symbol,
-        start_date=start_date,
-        end_date=end_date,
-    )
-
-    featured_data = create_price_features(price_data)
-    labeled_data = create_price_labels(featured_data)
-
-    dataset = labeled_data.dropna(
-        subset=FEATURE_COLUMNS + [TARGET_COLUMN]
-    ).copy()
-
-    dataset[TARGET_COLUMN] = dataset[TARGET_COLUMN].astype(int)
-
-    return dataset
-
-
-def split_train_test_by_time(
-    dataset: pd.DataFrame,
-    train_ratio: float = 0.8,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    Split the dataset into training and test sets while keeping time order.
-
-    The first 80% of rows are used for training.
-    The final 20% of rows are used for testing.
-    """
-
-    if dataset.empty:
-        raise ValueError("Dataset is empty. Cannot split empty data.")
-
-    split_index = int(len(dataset) * train_ratio)
-
-    train_data = dataset.iloc[:split_index]
-    test_data = dataset.iloc[split_index:]
-
-    if train_data.empty or test_data.empty:
-        raise ValueError("Train/test split failed. Not enough rows available.")
-
-    return train_data, test_data
 
 
 def train_baseline_model(dataset: pd.DataFrame) -> dict:
@@ -91,13 +26,16 @@ def train_baseline_model(dataset: pd.DataFrame) -> dict:
     0 = not up tomorrow
     """
 
-    train_data, test_data = split_train_test_by_time(dataset)
+    train_test_data = create_train_test_data(dataset)
 
-    x_train = train_data[FEATURE_COLUMNS]
-    y_train = train_data[TARGET_COLUMN]
+    train_data = train_test_data["train_data"]
+    test_data = train_test_data["test_data"]
 
-    x_test = test_data[FEATURE_COLUMNS]
-    y_test = test_data[TARGET_COLUMN]
+    x_train = train_test_data["x_train"]
+    y_train = train_test_data["y_train"]
+
+    x_test = train_test_data["x_test"]
+    y_test = train_test_data["y_test"]
 
     if y_train.nunique() < 2:
         raise ValueError(
@@ -129,6 +67,11 @@ def train_baseline_model(dataset: pd.DataFrame) -> dict:
         y_pred=naive_predictions,
     )
 
+    backtest_results = run_long_flat_backtest(
+        test_data=test_data,
+        predictions=model_predictions,
+    )
+
     return {
         "model": model,
         "training_rows": len(train_data),
@@ -136,6 +79,7 @@ def train_baseline_model(dataset: pd.DataFrame) -> dict:
         "most_common_training_label": int(most_common_training_label),
         "model_metrics": model_metrics,
         "naive_metrics": naive_metrics,
+        "backtest": backtest_results,
     }
 
 
@@ -164,10 +108,50 @@ def print_metric_summary(title: str, metrics: dict) -> None:
     print()
 
 
+def print_backtest_summary(backtest: dict) -> None:
+    """
+    Print a readable summary of the simple long/flat backtest.
+    """
+
+    summary = backtest["summary"]
+
+    print("Simple long/flat backtest")
+    print("-------------------------")
+    print(f"Backtest rows: {summary['backtest_rows']}")
+    print(
+        "Days in market: "
+        f"{summary['days_in_market']} "
+        f"({summary['percent_days_in_market']:.1%})"
+    )
+    print()
+    print(f"Strategy total return:     {summary['strategy_total_return']:.2%}")
+    print(f"Buy-and-hold total return: {summary['buy_hold_total_return']:.2%}")
+    print()
+    print(
+        "Strategy average daily return:     "
+        f"{summary['strategy_average_daily_return']:.4%}"
+    )
+    print(
+        "Buy-and-hold average daily return: "
+        f"{summary['buy_hold_average_daily_return']:.4%}"
+    )
+    print()
+
+    if summary["strategy_total_return"] > summary["buy_hold_total_return"]:
+        print("Backtest result: The strategy beat buy-and-hold.")
+    elif summary["strategy_total_return"] < summary["buy_hold_total_return"]:
+        print("Backtest result: The strategy did NOT beat buy-and-hold.")
+    else:
+        print("Backtest result: The strategy matched buy-and-hold.")
+
+    print()
+
+
 def print_training_summary(
     symbol: str,
     dataset: pd.DataFrame,
     results: dict,
+    dataset_path=None,
 ) -> None:
     """
     Print a readable summary of the training run.
@@ -183,6 +167,10 @@ def print_training_summary(
     print(f"Rows after cleaning: {len(dataset)}")
     print(f"Feature columns: {FEATURE_COLUMNS}")
     print(f"Target column: {TARGET_COLUMN}")
+
+    if dataset_path is not None:
+        print(f"Saved ML dataset: {dataset_path}")
+
     print()
     print(f"Training rows: {results['training_rows']}")
     print(f"Test rows: {results['test_rows']}")
@@ -208,9 +196,13 @@ def print_training_summary(
         print("Result: The model matched the naive baseline on accuracy.")
 
     print()
+
+    print_backtest_summary(results["backtest"])
+
     print("Important reminder:")
-    print("Accuracy, precision, recall, and confidence do not mean profit.")
-    print("A trading system also needs backtesting, fees, slippage, and risk controls.")
+    print("This is a simplified educational backtest.")
+    print("It does not include fees, slippage, spread, taxes, or risk controls.")
+    print("A real trading system needs much more validation before paper trading or live use.")
 
 
 def main() -> None:
@@ -218,10 +210,15 @@ def main() -> None:
     start_date = date(2020, 1, 1)
     end_date = date.today()
 
-    dataset = build_training_dataset(
+    dataset = build_ml_dataset(
         symbol=symbol,
         start_date=start_date,
         end_date=end_date,
+    )
+
+    dataset_path = save_ml_dataset(
+        dataset=dataset,
+        symbol=symbol,
     )
 
     results = train_baseline_model(dataset)
@@ -230,6 +227,7 @@ def main() -> None:
         symbol=symbol,
         dataset=dataset,
         results=results,
+        dataset_path=dataset_path,
     )
 
 

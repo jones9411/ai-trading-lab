@@ -26,3 +26,15 @@ Thumbs.db
 .vscode/
 
 AI_TRADING_LAB_PROJECT_STATE.md
+
+#cd C:\Users\carlj\Documents\ai-trading-lab                                                                                                         
+#>>                                              
+#>> git status       
+
+#git add .                                                                                                                                          
+#git commit -m "Added the a prediction route to the API"
+
+
+#cd C:\Users\carlj\Documents\ai-trading-lab                                                                                                         
+#>> git config --global credential.helper manager          
+#>> git push -u origin main
