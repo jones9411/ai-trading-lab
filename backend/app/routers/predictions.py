@@ -1,12 +1,8 @@
-import logging
-
 from fastapi import APIRouter, HTTPException, Path
 
 from app.schemas.predictions import PredictionResponse
 from app.services.prediction_service import get_prediction_for_symbol
-
-
-logger = logging.getLogger(__name__)
+from app.services.price_service import normalize_symbol
 
 router = APIRouter(
     prefix="/api/predictions",
@@ -24,19 +20,19 @@ def get_prediction(
         description="Stock symbol, for example AAPL, MSFT, TSLA, or VOD.L.",
     ),
 ):
-    try:
-        return get_prediction_for_symbol(symbol)
+    normalized_symbol = normalize_symbol(symbol)
 
-    except ValueError as error:
+    try:
+        return get_prediction_for_symbol(normalized_symbol)
+
+    except FileNotFoundError as error:
         raise HTTPException(
             status_code=404,
             detail=str(error),
         ) from error
 
-    except Exception as error:
-        logger.exception("Prediction failed for symbol %s", symbol)
-
+    except ValueError as error:
         raise HTTPException(
-            status_code=500,
-            detail="Prediction failed. Check backend logs for details.",
+            status_code=400,
+            detail=str(error),
         ) from error
